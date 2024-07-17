@@ -13,3 +13,22 @@
 
 #---------------------------------- Content ---------------------------------#
 
+#begin main_text.spritefont
+/importer:FontDescriptionImporter
+/processor:FontDescriptionProcessor
+/processorParam:PremultiplyAlpha=True
+/processorParam:TextureFormat=Compressed
+/build:main_text.spritefont
+
+#begin pixel_mask.fx
+/importer:EffectImporter
+/processor:EffectProcessor
+/processorParam:DebugMode=Auto
+/build:pixel_mask.fx
+
+#begin simple_render.fx
+/importer:EffectImporter
+/processor:EffectProcessor
+/processorParam:DebugMode=Auto
+/build:simple_render.fx
+

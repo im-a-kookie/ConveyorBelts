@@ -1,34 +1,24 @@
-﻿using System;
+﻿using ConveyorBeltExample.GameWorld;
+using ConveyorEngine.Util;
+using System;
 using System.Collections.Generic;
-using System.IO;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace ConveyorBeltExample.GameWorld
+namespace ConveyorEngine.GameWorld
 {
-    internal class WorldManager
+    public class WorldManager
     {
 
-        public string WorldName = "";
+        
+        //A world is created within a position bound
+        //This leads to a small problem with world regioning, since we need to collapse arbitrary points into a world...
+        //Should we just use world regions?
+        //Each world is up to 1 million blocks?
 
-        public string WorldPath
-        {
-            get
-            {
-                string s = "\\Worlds\\" + WorldName;
-                Directory.CreateDirectory(s);
-                return s;
-            }
-        }
-
-        public WorldManager(string WorldName) 
-        {
-            this.WorldName = WorldName;
-        }
-
-
-
+        
 
 
 

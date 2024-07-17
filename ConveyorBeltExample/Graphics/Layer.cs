@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace ConveyorBeltExample.Graphics
 {
-    internal class Layer
+    public class Layer
     {
 
         public bool Valid = false;
@@ -53,7 +53,7 @@ namespace ConveyorBeltExample.Graphics
                 return;
             }
 
-            UV = SpriteManager.SpriteMappings[s];
+            UV = SpriteManager.SpriteMappings[s].R;
             if (n > 0)
             { 
                 string pars = definition.Substring(n + 1, definition.Length - n);
@@ -75,7 +75,7 @@ namespace ConveyorBeltExample.Graphics
                 Valid = false;
                 return;
             }
-            UV = SpriteManager.SpriteMappings[id];
+            UV = SpriteManager.SpriteMappings[id].R;
             UV = new Rectangle(UV.X + region.X, UV.Y + region.Y, region.Width, region.Height);
         }
 
@@ -86,7 +86,7 @@ namespace ConveyorBeltExample.Graphics
                 Valid = false;
                 return;
             }
-            UV = SpriteManager.SpriteMappings[id];
+            UV = SpriteManager.SpriteMappings[id].R;
             UV = new Rectangle(UV.X + X, UV.Y + Y, W, H);
         }
 

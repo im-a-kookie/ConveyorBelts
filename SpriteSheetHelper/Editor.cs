@@ -1,12 +1,15 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
+using System.Diagnostics;
 using System.Drawing;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -18,6 +21,7 @@ namespace SpriteSheetHelper
     {
 
         List<string> SheetPaths = new List<string>();
+        public string? workingDir = null;
 
         Sprite? SelectedSprite = null;
         TreeNode? SelectedNode = null;
@@ -34,17 +38,39 @@ namespace SpriteSheetHelper
             }
         }
 
+        public int GRID = 8;
+
+
         public Editor()
         {
             InitializeComponent();
             typeof(Panel).InvokeMember("DoubleBuffered", BindingFlags.SetProperty | BindingFlags.Instance | BindingFlags.NonPublic, null, pDrawing, new object[] { true });
-            textBox1.KeyDown += Editor_KeyDown;
             // Add event handlers for the required drag events.
             treeView1.ItemDrag += new ItemDragEventHandler(treeView1_ItemDrag);
             treeView1.DragEnter += new DragEventHandler(treeView1_DragEnter);
             treeView1.DragOver += new DragEventHandler(treeView1_DragOver);
             treeView1.DragDrop += new DragEventHandler(treeView1_DragDrop);
+            this.KeyDown += Editor_KeyDown1;
+            treeView1.KeyDown += Editor_KeyDown1;
+            textBox1.KeyDown += Editor_KeyDown1;
+            pDrawing.KeyDown += Editor_KeyDown1;
+        }
 
+        private void Editor_KeyDown1(object? sender, KeyEventArgs e)
+        {
+            if (!CanUI()) return;
+
+            if (ModifierKeys.HasFlag(Keys.Control))
+            {
+                if (e.KeyCode == Keys.N)
+                {
+                    newSpriteToolStripMenuItem_Click(this, new EventArgs());
+                }
+                else if (e.KeyCode == Keys.G)
+                {
+                    insertNodeToolStripMenuItem_Click(this, new EventArgs());
+                }
+            }
         }
 
         private void bAddSheet_Click(object sender, EventArgs e)
@@ -110,8 +136,9 @@ namespace SpriteSheetHelper
             {
                 if (pDrawing.Tag == null)
                 {
-                    if (File.Exists(SheetPaths[n]))
-                        pDrawing.Tag = Image.FromFile(SheetPaths[n]);
+                    string p = (workingDir != null ? workingDir + "\\" : "") + SheetPaths[n];
+                    if (File.Exists(p))
+                        pDrawing.Tag = Image.FromFile(p);
                 }
 
                 if (pDrawing.Tag != null && pDrawing.Tag is Image i)
@@ -128,27 +155,27 @@ namespace SpriteSheetHelper
                     e.Graphics.DrawImage(i, w, h, s * i.Width, s * i.Height);
 
                     //now set the transform to the scale yay
-                    e.Graphics.Transform = new System.Drawing.Drawing2D.Matrix(s * 16, 0, 0, s * 16, w, h);
+                    e.Graphics.Transform = new System.Drawing.Drawing2D.Matrix(s * GRID, 0, 0, s * GRID, w, h);
 
 
-                    var iR = new Rectangle(0, 0, i.Width / 16, i.Height / 16);
+                    var iR = new Rectangle(0, 0, i.Width, i.Height);
                     if (iR.Contains(MouseCurrent) && (!Dragging || iR.Contains(ClickPlace)))
                     {
                         if (Dragging)
                         {
                             var p = MouseCurrent;
-                            e.Graphics.DrawRectangle(new Pen(Color.FromArgb(128, 255, 0, 0), 2 / (16f * s)),
-                                Math.Min(ClickPlace.X, MouseCurrent.X),
-                                Math.Min(ClickPlace.Y, MouseCurrent.Y),
-                                1 + Math.Abs(ClickPlace.X - MouseCurrent.X),
-                                1 + Math.Abs(ClickPlace.Y - MouseCurrent.Y));
+                            e.Graphics.DrawRectangle(new Pen(Color.FromArgb(128, 255, 0, 0), 2 / (GRID * s)),
+                                Math.Min(ClickPlace.X / GRID, MouseCurrent.X / GRID),
+                                Math.Min(ClickPlace.Y / GRID, MouseCurrent.Y / GRID),
+                                1 + Math.Abs((ClickPlace.X - MouseCurrent.X) / GRID),
+                                1 + Math.Abs((ClickPlace.Y - MouseCurrent.Y) / GRID));
                         }
-                        else e.Graphics.DrawRectangle(new Pen(Color.FromArgb(128, 255, 0, 0), 1 / (16f * s)), MouseCurrent.X, MouseCurrent.Y, 1, 1); ;
+                        else e.Graphics.DrawRectangle(new Pen(Color.FromArgb(128, 255, 0, 0), 1f / (GRID * s)), MouseCurrent.X / GRID, MouseCurrent.Y / GRID, 1, 1); ;
                     }
 
                     if (iR.Contains(Selected))
                     {
-                        e.Graphics.DrawRectangle(new Pen(Color.FromArgb(128, 50, 80, 255), 3 / (16f * s)), Selected.X, Selected.Y, Selected.Width, Selected.Height);
+                        e.Graphics.DrawRectangle(new Pen(Color.FromArgb(128, 50, 80, 255), 3f / (GRID * s)), Selected.X / GRID, Selected.Y / GRID, Selected.Width / GRID, Selected.Height / GRID);
                     }
 
 
@@ -176,7 +203,7 @@ namespace SpriteSheetHelper
                 int w = (pDrawing.Width - s * i.Width) / 2;
                 int h = (pDrawing.Height - s * i.Height) / 2;
                 Rectangle iBounds = new Rectangle(w, h, s * i.Width, s * i.Height);
-                MouseCurrent = new Point((e.X - iBounds.X) / (16 * s), (e.Y - iBounds.Y) / (16 * s));
+                MouseCurrent = new Point((e.X - iBounds.X) / s, (e.Y - iBounds.Y) / s);
 
 
 
@@ -195,7 +222,7 @@ namespace SpriteSheetHelper
                 int w = (pDrawing.Width - s * i.Width) / 2;
                 int h = (pDrawing.Height - s * i.Height) / 2;
                 Rectangle iBounds = new Rectangle(w, h, s * i.Width, s * i.Height);
-                MouseCurrent = new Point((e.X - iBounds.X) / (16 * s), (e.Y - iBounds.Y) / (16 * s));
+                MouseCurrent = new Point((e.X - iBounds.X) / s, (e.Y - iBounds.Y) / s);
                 Dragging = true;
                 ClickPlace = MouseCurrent;
                 Selected = new Rectangle(-1, -1, 0, 0);
@@ -209,24 +236,32 @@ namespace SpriteSheetHelper
 
             if (pDrawing.Tag != null && pDrawing.Tag is Image i)
             {
+
+                if (ModifierKeys.HasFlag(Keys.Control))
+                {
+                    newSpriteToolStripMenuItem_Click(this, new EventArgs());
+                    textBox1.SelectAll();
+                }
+
+
                 //get the location
                 int s = Math.Min((int)pDrawing.Width / i.Width, (int)pDrawing.Height / i.Height);
                 int w = (pDrawing.Width - s * i.Width) / 2;
                 int h = (pDrawing.Height - s * i.Height) / 2;
                 Rectangle iBounds = new Rectangle(w, h, s * i.Width, s * i.Height);
-                MouseCurrent = new Point((e.X - iBounds.X) / (16 * s), (e.Y - iBounds.Y) / (16 * s));
-                var iR = new Rectangle(0, 0, i.Width / 16, i.Height / 16);
+                MouseCurrent = new Point((e.X - iBounds.X) / ( s), (e.Y - iBounds.Y) / ( s));
+                var iR = new Rectangle(0, 0, i.Width , i.Height);
                 if (iR.Contains(MouseCurrent) && (!Dragging || iR.Contains(ClickPlace)))
                     Selected = new Rectangle(
-                        Math.Min(ClickPlace.X, MouseCurrent.X),
-                        Math.Min(ClickPlace.Y, MouseCurrent.Y),
-                        1 + Math.Abs(ClickPlace.X - MouseCurrent.X),
-                        1 + Math.Abs(ClickPlace.Y - MouseCurrent.Y));
+                        Math.Min(GRID * (ClickPlace.X / GRID), GRID * (MouseCurrent.X / GRID)),
+                        Math.Min(GRID * (ClickPlace.Y / GRID), GRID * (MouseCurrent.Y / GRID)),
+                        GRID + (Math.Abs(ClickPlace.X - MouseCurrent.X) / GRID) * GRID,
+                        GRID + (Math.Abs(ClickPlace.Y - MouseCurrent.Y) / GRID) * GRID);
                 else Selected = new Rectangle(-1, -1, 0, 0);
 
                 if (SelectedSprite != null && SelectedNode != null)
                 {
-                    SelectedSprite.bounds = Selected;
+                    SelectedSprite.bounds = new Rectangle(Selected.X, Selected.Y, Selected.Width, Selected.Height);
                 }
 
                 if (iR.Contains(Selected))
@@ -249,22 +284,22 @@ namespace SpriteSheetHelper
             if (pDrawing.Tag != null && pDrawing.Tag is Image i)
             {
                 //get the location
-                int s = Math.Min((int)pDrawing.Width / i.Width, (int)pDrawing.Height / i.Height);
-                int w = (pDrawing.Width - s * i.Width) / 2;
-                int h = (pDrawing.Height - s * i.Height) / 2;
-                Rectangle iBounds = new Rectangle(w, h, s * i.Width, s * i.Height);
-                var iR = new Rectangle(0, 0, i.Width / 16, i.Height / 16);
+                float s = Math.Min((int)pDrawing.Width / i.Width, (int)pDrawing.Height / i.Height);
+                int w = (int)((pDrawing.Width - s * i.Width) / 2);
+                int h = (int)((pDrawing.Height - s * i.Height) / 2);
+                Rectangle iBounds = new Rectangle(w, h, (int)(s * i.Width), (int)(s * i.Height));
+                var iR = new Rectangle(0, 0, i.Width, i.Height);
                 if (iR.Contains(Selected) && Selected.Width > 0 && Selected.Height > 0)
                 {
                     var sR_ = new Rectangle(Selected.X, Selected.Y, Selected.Width, Selected.Height);
-                    var sR = new Rectangle(sR_.X * 16, sR_.Y * 16, sR_.Width * 16, sR_.Height * 16);
+                    var sR = new Rectangle(sR_.X, sR_.Y , sR_.Width , sR_.Height );
 
                     //get the location
-                    s = Math.Min((int)pPreview.Width / sR.Width, (int)pPreview.Height / sR.Height);
-                    w = (pPreview.Width - s * sR.Width) / 2;
-                    h = (pPreview.Height - s * sR.Height) / 2;
+                    s = Math.Min((float)pPreview.Width / sR.Width, (float)pPreview.Height / sR.Height);
+                    w = (int)((pPreview.Width - s * sR.Width) / 2);
+                    h = (int)((pPreview.Height - s * sR.Height) / 2);
 
-                    var ssr = new Rectangle(w, h, sR.Width * s, sR.Height * s);
+                    var ssr = new Rectangle(w, h, (int)(sR.Width * s), (int)(sR.Height * s));
 
                     e.Graphics.DrawImage(i,
                         ssr,
@@ -276,7 +311,7 @@ namespace SpriteSheetHelper
             }
         }
 
-       
+
         private void textBox1_TextChanged(object sender, EventArgs e)
         {
             if (SelectedSprite != null && SelectedNode != null)
@@ -315,12 +350,18 @@ namespace SpriteSheetHelper
             {
                 if (sfd.ShowDialog() == DialogResult.OK)
                 {
-
                     string dir = Path.GetDirectoryName(sfd.FileName) + "\\" + Path.GetFileNameWithoutExtension(sfd.FileName);
                     Directory.CreateDirectory(dir);
                     Dictionary<string, List<Sprite>> sprites = new Dictionary<string, List<Sprite>>();
 
-                    foreach(var n in treeView1.GetAllNodes())
+                    //copy the sprite sheet parts into the thing here
+                    Dictionary<string, string> sheet_copies = new Dictionary<string, string>();
+
+                    //clean it out for us to be put there
+                    foreach(string d in Directory.EnumerateDirectories(dir))
+                        Directory.Delete(d);
+                    
+                    foreach (var n in treeView1.GetAllNodes())
                     {
                         if (n.Tag is Sprite s)
                         {
@@ -329,22 +370,33 @@ namespace SpriteSheetHelper
                             else sprites.Add(s.sheet, spriteGroup = new List<Sprite>());
                             spriteGroup.Add(s);
                             var nn = n;
-                            while (nn.Parent != null) { nn = nn.Parent; s.stack = nn.Text + "\\" + s.stack;  }
+                            s.stack = "";
+                            while (nn.Parent != null) { nn = nn.Parent; s.stack = nn.Text + "\\" + s.stack; }
                             if (s.stack.EndsWith('\\')) s.stack = s.stack.Remove(s.stack.Length - 1);
+                            if (!sheet_copies.ContainsKey(s.sheet))
+                            {
+                                sheet_copies.Add(s.sheet, (s.sheet.Contains("\\") ? Path.GetFileName(s.sheet) : s.sheet));
+                                if (!File.Exists(dir + "\\" + (s.sheet.Contains("\\") ? Path.GetFileName(s.sheet) : s.sheet)))
+                                    File.Copy((workingDir != null ? workingDir + "\\" : "") + s.sheet, dir + "\\" + (s.sheet.Contains("\\") ? Path.GetFileName(s.sheet) : s.sheet));
+                            }
+                            s.sheet = Path.GetFileName("\\" + (s.sheet.Contains("\\") ? Path.GetFileName(s.sheet) : s.sheet));
                         }
                     }
+
+                    //delete everything that isn't one of the sheets?
+
 
                     StringBuilder sb = new StringBuilder(100 * sprites.Count);
                     foreach (var k in sprites)
                     {
-                        if (File.Exists(k.Key))
+                        if (File.Exists((workingDir != null ? workingDir + "\\" : "") + k.Key))
                         {
-                            using (Image i = Image.FromFile(k.Key))
+                            using (Image i = Image.FromFile((workingDir != null ? workingDir + "\\" : "") + k.Key))
                             {
                                 foreach (Sprite s in k.Value)
                                 {
-                                    Rectangle r_out = new Rectangle(0, 0, s.bounds.Width * 16, s.bounds.Height * 16);
-                                    Rectangle r_in = new Rectangle(s.bounds.X * 16, s.bounds.Y * 16, s.bounds.Width * 16, s.bounds.Height * 16);
+                                    Rectangle r_out = new Rectangle(0, 0, s.bounds.Width, s.bounds.Height);
+                                    Rectangle r_in = new Rectangle(s.bounds.X, s.bounds.Y, s.bounds.Width, s.bounds.Height);
                                     using (Bitmap result = new Bitmap(r_out.Width, r_out.Height))
                                     {
                                         using (Graphics g = Graphics.FromImage(result))
@@ -352,6 +404,7 @@ namespace SpriteSheetHelper
                                             g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.NearestNeighbor;
                                             g.DrawImage(i, r_out, r_in, GraphicsUnit.Pixel);
                                         }
+
                                         Directory.CreateDirectory(dir + "\\" + s.stack);
                                         result.Save(dir + "\\" + s.stack + "\\" + s.name + ".png");
                                         if (s.rotates)
@@ -368,17 +421,23 @@ namespace SpriteSheetHelper
                                             }
                                         }
                                     }
-                                    sb.Append(s.stack + "#" + s.name + "#" + s.sheet + "#" + (r_in.X + (r_in.Y << 8) + (r_in.Width << 16) + (r_in.Height << 24)) + "#\n");
+
+                                    sb.Append("{name:" + s.name +"; stack:" + s.stack + "; sheet:" + s.sheet + "; bounds:" + r_in.X + ", " + r_in.Y + ", " + r_in.Width + ", " + r_in.Height + ";}\n");
                                     s.stack = "";
                                 }
 
                             }
                         }
                     }
+
+
                     File.WriteAllText(dir + "\\index.spr", sb.ToString());
+                    ResetUi();
+                    var str = File.ReadAllText(dir + "\\index.spr");
+                    workingDir = dir;
+
+                    Import(str);
                 }
-
-
 
 
             }
@@ -390,68 +449,160 @@ namespace SpriteSheetHelper
             {
                 if (ofd.ShowDialog() == DialogResult.OK)
                 {
-                    var s = File.ReadAllText(ofd.FileName).Split("\n").Select(x => x.Trim());
-                    ResetUi();
+                    var s = File.ReadAllText(ofd.FileName);
+                    ResetUi();                  
+                    workingDir = Path.GetDirectoryName(ofd.FileName);
+                    Import(s);
+                }
+            }
+        }
 
-                    foreach (string ss in s)
+
+        static int LastIndex(char c, Span<char> s, int i = int.MaxValue)
+        {
+            for(int j = int.Min(i, s.Length-1); j >= 0; --j)
+            {
+                if (s[j] == c) return j;
+            }
+            return -1;
+        }
+
+
+
+
+        public Dictionary<string, string> Parse(Span<char> s)
+        {
+            Dictionary<string, string> output = new();
+            int i = s.LastIndexOf('{');
+            if (i > 0)
+            {
+                s = s.Slice(i, s.Length - i);
+
+                int j = s.IndexOf('}');
+                if (j >= 0)
+                {
+                    s = s.Slice(0, j);
+                }
+            }
+
+            //now iterate the semi-colons and colons
+            s[0] = ' ';
+            int offset = 1;
+            int pos = s.IndexOf(';');
+            while(pos > 0)
+            {
+                int ppos = s.IndexOf(":");
+                if (ppos > 0)
+                {
+                    string key = s.Slice(offset, ppos-offset).ToString().Trim();
+                    string val = s.Slice(ppos + 1, pos - ppos - 1).ToString().Trim();
+                    if (!output.TryAdd(key, val)) output[key] = val;
+                }
+
+
+                for(int j = offset; j <= pos; j++)
+                {
+                    s[j] = ' ';
+                }
+
+                offset = pos;
+                pos = s.IndexOf(';');
+            }
+
+            s.Fill(' ');
+            if (output.Count == 0) return null;
+            return output;
+
+        }
+
+        public static Rectangle Unspool(string s)
+        {
+            var ss = s.Split(',').Select(x => x.Trim()).Where(x => x.Length > 0).ToArray();
+            if (ss.Length != 4) return new Rectangle(0, 0, 0, 0);
+            try
+            {
+                return new Rectangle(int.Parse(ss[0]), int.Parse(ss[1]), int.Parse(ss[2]), int.Parse(ss[3]));
+            }
+            catch
+            {
+                return new Rectangle(0, 0, 0, 0);
+            }
+        }
+
+
+        public void Import(string s)
+        {
+
+            var sp = new Span<char>(s.ToCharArray());
+            Dictionary<string, string> d = null;
+            int counter = 0;
+
+            while((d = Parse(sp)) != null)
+            {
+                ++counter;
+                if (!d.ContainsKey("name")) d.Add("name", "Sprite" + counter);
+                if (!d.ContainsKey("stack")) d.Add("stack", "Root");
+                if (!d.ContainsKey("bounds")) d.Add("bounds", "0,0,0,0");
+                if (!d.ContainsKey("sheet")) continue;
+
+                Sprite spr = new Sprite() { name = d["name"], sheet = d["sheet"], stack = d["stack"], bounds = Unspool(d["bounds"]) };
+            
+                if (!SheetPaths.Contains(spr.sheet)) SheetPaths.Add(spr.sheet);
+
+                TreeNode n = null;
+                foreach (TreeNode nn in treeView1.Nodes)
+                {
+                    if (nn.Text.ToLower().Equals("root")) n = nn;
+                    break;
+                }
+                if (n == null)
+                {
+                    n = new TreeNode("Root");
+                    treeView1.Nodes.Add(n);
+                }
+
+                string[] stackparts = spr.stack.Split('\\').Where(x => x != null && x.Length > 0).ToArray();
+                bool FoundOwner = false;
+
+                //walk up the nodes
+                string test_path = "";
+                test_path += n;
+                for (int ind = 1; ind < stackparts.Length; ind++)
+                {
+                    bool found = false;
+                    foreach (TreeNode nn in n.Nodes)
                     {
-
-                        string[] sss = ss.Split("#").Where(x => x.Trim().Length > 1).ToArray();
-                        RectangleConverter r = new RectangleConverter();
-
-                        int x = 0;
-                        if (int.TryParse(sss[3], out x))
+                        if (nn.Text.ToLower().Equals(stackparts[ind].ToLower().Trim()))
                         {
-                            Sprite spr = new Sprite() { stack = sss[0], name = sss[1], sheet = sss[2], bounds = new Rectangle(x & 0xFF, (x >> 8) & 0xFF, (x >> 16) & 0xFF, (x >> 24) & 0xFF) };
-                            if (!SheetPaths.Contains(spr.sheet)) SheetPaths.Add(spr.sheet);
-
-                            TreeNode n = null;
-                            foreach(TreeNode nn in treeView1.Nodes) { n = nn; break; }
-                            
-                            string[] stackparts = spr.stack.Split('\\');
-                            bool FoundOwner = false;
-                            for(int i = 1; i < stackparts.Length; i++)
-                            {
-                                if (stackparts[i] != null && stackparts[i].Length > 0)
-                                {
-                                    bool has = false;
-                                    //see if we can find the node
-                                    foreach(TreeNode nn in n.Nodes)
-                                    {
-                                        if (nn.Text == stackparts[i])
-                                        {
-                                            n = nn;
-                                            has = true;
-                                            break;
-                                        }
-                                    }
-
-                                    if (!has)
-                                    {
-                                        TreeNode nn = new TreeNode(stackparts[i]);
-                                        n.Nodes.Add(nn);
-                                        n = nn;
-                                    }
-                                }
-                            }
-
-                            if (n != null) n.Nodes.Add(new TreeNode(spr.name) { Tag = spr });
-
+                            test_path += "\\" + nn.Text;
+                            n = nn;
+                            found = true;
+                            break;
                         }
-
-
                     }
 
-                    lbSheets.Items.Clear();
-                    cbSheetSelector.Items.Clear();
-                    foreach (string path in SheetPaths)
+                    if (!found)
                     {
-                        lbSheets.Items.Add(s);
-                        cbSheetSelector.Items.Add(Path.GetFileNameWithoutExtension(path));
+                        TreeNode _n = new TreeNode(stackparts[ind]);
+                        n.Nodes.Add(_n);
+                        n = _n;
                     }
 
                 }
+
+                if (n != null) n.Nodes.Add(new TreeNode(spr.name) { Tag = spr });
+
             }
+
+
+            lbSheets.Items.Clear();
+            cbSheetSelector.Items.Clear();
+            foreach (string path in SheetPaths)
+            {
+                lbSheets.Items.Add(path);
+                cbSheetSelector.Items.Add(path.Contains("\\") ? Path.GetFileNameWithoutExtension(path) : path);
+            }
+
         }
 
         private void treeView1_NodeMouseDoubleClick(object sender, TreeNodeMouseClickEventArgs e)
@@ -469,7 +620,7 @@ namespace SpriteSheetHelper
                         //now we will do the thing because stuff
                         Selected = s.bounds;
                         cbRotates.Checked = s.rotates;
-                        lbSpriteDimensions.Text = Selected.ToString();
+                        lbSpriteDimensions.Text = Selected.X + ", " + Selected.Y + "\n" + Selected.Width + ", " + Selected.Height;
                         if (SelectedNode != null) SelectedNode.Text = SelectedNode.Text.Replace(">> ", "");
                         SelectedNode = e.Node;
                         SelectedNode.Text = ">> " + SelectedNode.Text.Replace(">> ", "");
@@ -680,15 +831,16 @@ namespace SpriteSheetHelper
         }
 
         private void treeView1_AfterLabelEdit(object sender, NodeLabelEditEventArgs e)
-        {           
+        {
             if (e.Node != null)
             {
                 if (e.Label == null || e.Label.Length <= 0) e.CancelEdit = true;
-                foreach(var n in treeView1.GetAllNodes())
+                foreach (var n in treeView1.GetAllNodes())
                 {
-                    if (n.Tag == null && n.Text.ToLower().Equals(e.Label)) e.CancelEdit = true;
+                    if (n != e.Node && n.Tag == null && n.Text.ToLower().Equals(e.Label)) e.CancelEdit = true;
                 }
-                if (e.CancelEdit) e.Node.Text = e.Label;
+                if (!e.CancelEdit) e.Node.Text = e.Label;
+                e.CancelEdit = true;
             }
         }
 
@@ -699,10 +851,12 @@ namespace SpriteSheetHelper
         private void Editor_Load(object sender, EventArgs e)
         {
             ResetUi();
+
         }
 
         public void ResetUi()
         {
+            workingDir = null;
             SheetPaths.Clear();
             treeView1.Nodes.Clear();
             treeView1.Nodes.Add("Root");
@@ -714,6 +868,12 @@ namespace SpriteSheetHelper
 
         }
 
-
+        private void deleteNodeToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (treeView1.SelectedNode != null)
+            {
+                treeView1.SelectedNode.Remove();
+            }
+        }
     }
 }

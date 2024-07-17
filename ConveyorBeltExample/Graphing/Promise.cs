@@ -7,12 +7,23 @@ using System.Threading.Tasks;
 
 namespace ConveyorBeltExample.Graphing
 {
-    internal class Promise
+    public class Promise
     {
         public Branch owner;
+        public Branch target;
         public Item item;
-        public int time;
+        /// <summary>
+        /// The time that this promise is made
+        /// </summary>
+        public long time;
+        /// <summary>
+        /// The number of ticks that are resolved on the owner by this promise
+        /// <para>Used to update owner.LastResolvedOutputTick</para>
+        /// </summary>
+        public long resolved_tick;
         public int ext = 0;
+        public int slot = 0;
+
 
         /// <summary>
         /// Consumes this promise from the branch that owns it
@@ -39,7 +50,7 @@ namespace ConveyorBeltExample.Graphing
             while(a <= b)
             {
                 int mid = (a + b) >> 1;
-                int val = collection[mid].time;
+                long val = collection[mid].time;
                 if (val > p.time) b = mid - 1;
                 else a = mid + 1;
             }

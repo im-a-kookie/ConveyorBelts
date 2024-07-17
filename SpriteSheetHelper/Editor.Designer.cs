@@ -212,7 +212,6 @@
             // lbSheets
             // 
             lbSheets.FormattingEnabled = true;
-            lbSheets.ItemHeight = 20;
             lbSheets.Location = new Point(6, 6);
             lbSheets.Name = "lbSheets";
             lbSheets.Size = new Size(194, 244);
@@ -281,32 +280,33 @@
             contextMenuStrip1.ImageScalingSize = new Size(20, 20);
             contextMenuStrip1.Items.AddRange(new ToolStripItem[] { newSpriteToolStripMenuItem, insertNodeToolStripMenuItem, deleteNodeToolStripMenuItem, renameNodeToolStripMenuItem });
             contextMenuStrip1.Name = "contextMenuStrip1";
-            contextMenuStrip1.Size = new Size(174, 100);
+            contextMenuStrip1.Size = new Size(211, 128);
             // 
             // newSpriteToolStripMenuItem
             // 
             newSpriteToolStripMenuItem.Name = "newSpriteToolStripMenuItem";
-            newSpriteToolStripMenuItem.Size = new Size(173, 24);
+            newSpriteToolStripMenuItem.Size = new Size(210, 24);
             newSpriteToolStripMenuItem.Text = "New Sprite";
             newSpriteToolStripMenuItem.Click += newSpriteToolStripMenuItem_Click;
             // 
             // insertNodeToolStripMenuItem
             // 
             insertNodeToolStripMenuItem.Name = "insertNodeToolStripMenuItem";
-            insertNodeToolStripMenuItem.Size = new Size(173, 24);
+            insertNodeToolStripMenuItem.Size = new Size(210, 24);
             insertNodeToolStripMenuItem.Text = "Insert Node";
             insertNodeToolStripMenuItem.Click += insertNodeToolStripMenuItem_Click;
             // 
             // deleteNodeToolStripMenuItem
             // 
             deleteNodeToolStripMenuItem.Name = "deleteNodeToolStripMenuItem";
-            deleteNodeToolStripMenuItem.Size = new Size(173, 24);
+            deleteNodeToolStripMenuItem.Size = new Size(210, 24);
             deleteNodeToolStripMenuItem.Text = "Delete Node";
+            deleteNodeToolStripMenuItem.Click += deleteNodeToolStripMenuItem_Click;
             // 
             // renameNodeToolStripMenuItem
             // 
             renameNodeToolStripMenuItem.Name = "renameNodeToolStripMenuItem";
-            renameNodeToolStripMenuItem.Size = new Size(173, 24);
+            renameNodeToolStripMenuItem.Size = new Size(210, 24);
             renameNodeToolStripMenuItem.Text = "Rename Node";
             renameNodeToolStripMenuItem.Click += renameNodeToolStripMenuItem_Click;
             // 

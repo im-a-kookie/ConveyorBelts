@@ -9,7 +9,7 @@ namespace ConveyorBeltExample.Items
     /// <summary>
     /// The Item Group represents a list of items and relates them to a consolidated work value
     /// </summary>
-    internal class ItemGroup
+    public class ItemGroup
     {
 
         public List<Item> Items;

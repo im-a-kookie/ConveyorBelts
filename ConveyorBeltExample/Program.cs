@@ -1,9 +1,12 @@
 ﻿
-using ConveyorBeltExample;
 
-Benchmarks.Run();
+using ConveyorEngine.Tests;
+using ConveyorEngine.Util;
+using System.Diagnostics;
+using System.Threading;
 
-return;
+TestBed.GetAndPerformTestables();
+
 
 using var game = new ConveyorBeltExample.Core();
 game.Run();

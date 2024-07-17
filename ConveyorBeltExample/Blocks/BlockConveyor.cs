@@ -1,309 +1,394 @@
-﻿using ConveyorBeltExample.Graphics;
+﻿using ConveyorBeltExample;
+using ConveyorBeltExample.Blocks;
+using ConveyorBeltExample.GameWorld;
 using ConveyorBeltExample.Graphing;
 using ConveyorBeltExample.Items;
-using Microsoft.Xna.Framework;
+using ConveyorEngine.Items;
+using ConveyorEngine.Util;
+using Microsoft.Xna.Framework.Input;
 using System;
+using System.Buffers;
 using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
-using System.Net.Http;
-using System.Reflection.Metadata.Ecma335;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Threading;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
-namespace ConveyorBeltExample.Blocks
+namespace ConveyorEngine.Blocks
 {
-    internal class BlockConveyor : BlockGraphed
+    public class BlockConveyor : BlockGraphed
     {
+        /// <summary>
+        /// Ticks for this block to move items by one space forwards
+        /// </summary>
+        public int ProcessingTimePerBlock = Settings.Engine.TICK_RATE;
 
+        public int ProgressPerTick = Settings.Conveyors.CONVEYOR_PRECISION / Settings.Engine.TICK_RATE;
 
-
-        private static PointRectangle[][][][] ConveyorBounds;
-
-        private static int ProgressPerTick = (Settings.CONVEYOR_PRECISION / Settings.TICK_RATE);
-
-        static BlockConveyor()
+        public BlockConveyor(string name, double seconds_per_block)
         {
-            ConveyorBounds = new PointRectangle[4][][][];
-            foreach(Dir d0 in Enum.GetValues(typeof(Dir)))
-            {
-                ConveyorBounds[(int)d0] = new PointRectangle[16][][];
-                for(int j = 0; j < 16; j++)
-                {
-                    ConveyorBounds[(int)d0][j] = new PointRectangle[4][];
-                    for (int i = 0; i < 4; i++)
-                    {
-                        var n = GetBoundsOffsets(d0, j, i);
-                        ConveyorBounds[(int)d0][j][i] = n;
-                    }
-                }
-            }
+            this.name = name;
+            ProcessingTimePerBlock = (int.Max(1, (int)(Settings.Engine.TICK_RATE * seconds_per_block)));
+            ProgressPerTick = Settings.Conveyors.CONVEYOR_PRECISION / ProcessingTimePerBlock;
+        }
+
+        public override int ProcessingTime()
+        {
+            return ProcessingTimePerBlock;
+        }
+
+        public override float RenderWorkRate()
+        {
+            return Settings.Conveyors.CONVEYOR_PRECISION / (float)ProgressPerTick;
+        }
+
+        public override bool IsHomogenous(World w, Chunk cache, KPoint pos, BlockData data)
+        {
+            return data.block is BlockConveyor bc && bc.ProcessingTimePerBlock == ProcessingTimePerBlock;
+        }
+
+        public override bool ReceivesInput(World world, KPoint pos, BlockData data, KPoint providerPos, BlockData providerData)
+        {
+            //we can't receive input from our facing direction
+            return pos.Step(data.dir) != providerPos && base.ReceivesInput(world, pos, data, providerPos, providerData);
         }
 
         /// <summary>
-        /// Gets the rects
+        /// The main conveyor belt algorithm.
+        /// <para>This may appear to be unseemingly complicated. And it is. But.</para>
+        /// <para>Most conveyors will be offscreen once performance becomes problematic, where this approach allows us to forget them.</para>
         /// </summary>
-        /// <param name="mask"></param>
-        /// <param name="frame"></param>
+        /// <param name="u"></param>
+        /// <param name="w"></param>
+        /// <param name="time"></param>
+        /// <param name="branch"></param>
         /// <returns></returns>
-        public static PointRectangle[] GetRects(Dir d, int mask, int frame)
+        public override long UpdateTick(BranchUpdater u, World w, long time, Branch branch)
         {
-            return ConveyorBounds[(int)d][mask & 0xF][frame & 0x3];
-        }
-
-        public static PointRectangle[] GetBoundsOffsets(Dir direction, int mask, int frame)
-        {
-            //generate the bounding offsets for a conveyor in the given direction, withj the given mask
-            //where mask & (1 << CDir) == 1 if that direction is set
-            //and the corresponding bit for "direction" is taken as the output
-            //There are 8 states
-            //output to EAST/WEST with NORTH, SOUTH, BOTH, or NO inputs
-            //and the 90 degree rotation
-            mask |= (1 << (int)direction);
-            bool vertical = (((int)direction & 0x1) == 0);
-
-            //this is the frame for the outside of the thing
-
-            int[] slots = new int[4];
-            for (int i = 0; i < 4; i++)
+            if (branch.LastResolvedInputTick == time && branch.LastResolvedOutputTick == time)
             {
-                slots[i] = ((mask & (1 << i)) == 0) ? 0 : 1;
-            }
-            slots[(int)direction] = 2;
-
-            //So first of all
-            //let's draw the main body
-            //we do this if the slot opposite the direction is given
-            //or if no other slots are given
-
-            Dir d_opposite = (Dir)(((int)direction + 2) & 0x3);
-            Dir d_cw = (Dir)(((int)direction + 1) & 0x3);
-            Dir d_ccw = (Dir)(((int)direction - 1) & 0x3);
-
-            int m_op = 1 << (int)d_opposite;
-            int m_cw = 1 << (int)d_cw;
-            int m_ccw = 1 << (int)d_ccw;
-
-            int vn = vertical ? (direction == Dir.NORTH ? 4 + (frame & 0x3) : 4 - (frame & 0x3)) : 0;
-            int hn = vertical ? 0 : (direction == Dir.EAST ? 4 - (frame & 0x3) : 4 + (frame & 0x3));
-
-            List<PointRectangle> pointRectangles = new List<PointRectangle>();
-
-            if ((mask & m_op) != 0 || (mask & (m_cw | m_ccw)) == 0)
-            {
-                pointRectangles.Add(new PointRectangle(0, 0, hn, vn, SpriteManager.SPRITE_RES_PX, SpriteManager.SPRITE_RES_PX) { flag = !vertical });
-            }
-            else
-            {
-                int _x = direction == Dir.EAST ? 1 : 0;
-                int _y = direction == Dir.SOUTH ? 1 : 0;
-                pointRectangles.Add(new PointRectangle(
-                    4 * _x,4 * _y,
-                    hn + 4 * _x, vn + 4 * _y, vertical ? 16 : 12, vertical ? 12 : 16)
-                { flag = !vertical });
-
-                pointRectangles.Add(
-                    new PointRectangle(
-                    vertical ? 4 : 11 - 7 * _x, vertical ? 11 - 7 * _y : 4,
-                    vertical ? 4 : 31, vertical ? 31 : 4, vertical ? 8 : 1, vertical ? 1 : 8)
-                    { flag = !vertical });
-            }
-
-            //now atop this we add the d_cw and d_ccw if necessary
-            if ((mask & m_cw) != 0)
-            {
-                int dx = 0, dy = 0;
-                switch (d_cw)
+                while (branch.promises_out.TryDequeue(out var p))
                 {
-                    case Dir.NORTH: dx = 0; dy = 0; hn = 0; vn = 4 - (frame & 0x3); break;
-                    case Dir.EAST: dx = 11; dy = 0; vn = 0; hn = 7 + (frame & 0x3); break;
-                    case Dir.SOUTH: dx = 0; dy = 11; vn = 0; hn = 4 + (frame & 0x3); break;
-                    case Dir.WEST: dx = 0; dy = 0; vn = 0; hn = 4 - (frame & 0x3); break;
-                }
-
-                pointRectangles.Add(
-                    new PointRectangle(dx, dy, hn, vn, vertical ? 5 : 16, vertical ? 16 : 5) { flag = vertical }
-                    );
-
-            }
-
-            //now atop this we add the d_cw and d_ccw if necessary
-            if ((mask & m_ccw) != 0)
-            {
-                int dx = 0, dy = 0;
-                switch (d_ccw)
-                {
-                    case Dir.NORTH: dx = 0; dy = 0; hn = 0; vn = 4 - (frame & 0x3); break;
-                    case Dir.EAST: dx = 11; dy = 0; vn = 0; hn = 4 + (frame & 0x3); break;
-                    case Dir.SOUTH: dx = 0; dy = 11; vn = 0; hn = 4 + (frame & 0x3); break;
-                    case Dir.WEST: dx = 0; dy = 0; vn = 0; hn = 4 - (frame & 0x3); break;
-                }
-
-                pointRectangles.Add(
-                    new PointRectangle(dx, dy, hn, vn, vertical ? 5 : 16, vertical ? 16 : 5) { flag = vertical }
-                    );
-
-            }
-
-            return pointRectangles.ToArray();
-        }
-
-
-        public override int UpdateTick(int time)
-        {
-            int delta_t = (time - branch.TailTime) & Settings.TICK_MASK;
-            if (delta_t > (Settings.TICK_RATE * 60 * 60)) return time;
-            if (delta_t == 0) return time;
-
-            //this is the length of the conveyor stack
-            int max_distance = branch.Size * Settings.CONVEYOR_PRECISION;
-
-            if (branch.items is ConveyorInventory ci)
-            {
-
-                //1. See if we had any promises consumed
-                int promises_consumed = 0;
-                for(int i = 0; i < branch.promises_out.Count; i++)
-                {
-                    if (branch.promises_out[i].time == -1) promises_consumed += 1;
-                    else break;
-                }
-
-                //consume everything up to here then delete the next index
-                for(int i = 0; i < ci.Items.Count && promises_consumed > 0; i++)
-                {
-                    int n = int.Min(ci.Items[i].Length, promises_consumed);
-                    promises_consumed -= n;
-                    if (ci.Items[i].Length - n <= 0)
+                    if (p.owner.Index > 0)
                     {
-                        Item[] _new = new Item[ci.Items[i].Length - n];
-                        Array.Copy(ci.Items[i], n, _new, 0, n);
-                        ci.Items[i] = _new;
-                        ci.progresses[i] += n * Settings.CONVEYOR_SPACING;
+                        p.owner.LastResolvedInputTick = p.resolved_tick;
+                    }
+                }
+                return time;
+            }
+
+            //delta always greater than 0
+            if (branch.Inventory is SequentialInventory inv0)
+            {
+                branch.ItemCount = inv0.Items.Count;
+                //in a loose sense, we complete a branch when last resolved output tick is equal to time
+                long _t = branch.LastResolvedOutputTick;
+
+                inv0.PathLength = branch.Size * Settings.Conveyors.CONVEYOR_PRECISION;
+                inv0.Time = branch.LastResolvedOutputTick;
+
+                //inv0.RecalculateGaps();
+                long _h = inv0.SpaceAtHead;
+
+                //We need to quickly check our input and output ticks
+                branch.GetInputs(out var inputs, out var in_count);
+                branch.GetOutputs(out var outputs, out var out_count);
+
+
+                //If there are no inputs, then this branch is very easy to resolve
+                if (in_count <= 0)
+                {
+                    //There are no inputs, so all input ticks are resolved
+                    branch.LastResolvedInputTick = time;
+                    if (branch.ItemCount == 0)
+                    {
+                        branch.LastResolvedOutputTick = time;
+                        branch.ticks_left = branch.IsInViewCache ? 1 : int.Max(1, inv0.UnitsFromTail / ProgressPerTick);
+                        ArrayPool<Branch>.Shared.Return(inputs);
+                        ArrayPool<Branch>.Shared.Return(outputs);
+                        return time;
                     }
                     else
                     {
-                        ci.Items.RemoveAt(i--);
+                        //if we also have no promises out, then we don't need to update until the item reaches the head
+                        if(branch.promises_out.Count > 0)
+                        {
+                            branch.ticks_left = int.Max(1, inv0.UnitsFromTail / ProgressPerTick);
+                            branch.LastResolvedOutputTick = long.Min(time, branch.ticks_left);
+                        }
                     }
                 }
-                
-                //halt events are signalled by promise rejection
-                //when a promise is rejected, the first item is locked to the end of the conveyor
-                //everything behind it is then moved forwards
-                //and we stop updating until we receive a new update
-                if (branch.promises_out.Count > 0 && branch.promises_out[0].time == -2)
+                else
                 {
-                    branch.promises_out.RemoveAt(0);
-                    if (ci.Items.Count > 0)
+                    //There are inputs, so we need to figure out our best resolved input tick
+                    //Which is generally, the oldest state of any of our inputs
+                    //and can never exceed the current time
+                    branch.LastResolvedInputTick = branch.LastResolvedOutputTick;
+
+                    //If we have an input promise
+                    //Then the promisor is stuck at the time of that promise
+                    //So it will be resolved here
+                    for (int i = 0; i < in_count; i++)
                     {
-                        //we tick this to the end of the conveyor
-                        ci.progresses[0] = max_distance;
-                        ci.Items[0][0].time += 1;
-                        for(int i = 1; i < ci.Items.Count; ++i)
+                        if (inputs[i].ItemCount <= 0)
+                            inputs[i].LastResolvedOutputTick = long.Min(time, inputs[i].LastResolvedInputTick + inputs[i].Size * inputs[i].BranchProcessingTime());
+                        branch.LastResolvedInputTick = long.Min(inputs[i].LastResolvedOutputTick, branch.LastResolvedInputTick);
+                        //There is a case where that branch needs to be updated
+                        if (inputs[i].LastResolvedOutputTick < time) u.FlagUpdate(inputs[i]);
+                    }
+                }
+
+                //Now check if we have items
+                if (branch.ItemCount == 0)
+                {
+                    //Since we have no items, we know that nothing can happen on this branch until we receive an input
+                    //and we know that input cannot leave for the processing time of the branch
+                    //So we can make a quick prediction here
+                    branch.NonHaltingTick = long.Min(time, branch.LastResolvedInputTick + inv0.PathLength / ProgressPerTick);
+                    if (in_count <= 0)
+                    {
+                        //we have no inputs, or items, so we havee resolved this branch
+                        branch.LastResolvedOutputTick = time;
+                        //If we also have no promises
+                        if (branch.promises_in.Count == 0)
                         {
-                            int last_pos = ci.progresses[i-1] + ci.Items[i-1].Length * Settings.CONVEYOR_SPACING + Settings.CONVEYOR_SPACING;
-                            //find how many ticks
-                            int idelta = time - ci.Items[i][0].time;
-                            int dist = idelta * ProgressPerTick;
-                            ci.progresses[i] = int.Min(last_pos, ci.progresses[i] + dist);
-                            if (last_pos - ci.progresses[i]  < Settings.CONVEYOR_MERGE_THRESHOLD)
+                            //Then we won't update until an input visits us
+                            branch.ticks_left = 999999; //int.Max(1, (int)(time - branch.NonHaltingTick) - 1); //branch.Size * ProcessingTimePerBlock;
+                            ArrayPool<Branch>.Shared.Return(inputs);
+                            ArrayPool<Branch>.Shared.Return(outputs);
+                            return branch.LastResolvedOutputTick;
+                        }
+                    }
+                    else
+                    {
+                        //we have inputs, and they could possibly tick, so we can't update past our last resolvable input tick
+                        branch.LastResolvedOutputTick = branch.NonHaltingTick;
+                    }
+                }
+
+                //We cannot exceed the time of our last promise
+                if (branch.promises_out.TryPeek(out Promise firstP)) branch.LastResolvedOutputTick = firstP.time - 1;
+
+                //Now we can jam the items up to this tick
+                inv0.ForceToTicksUnaware(branch.LastResolvedOutputTick, ProgressPerTick);
+
+                //This creates as much space as we can get at the head of this branch right now
+                //So we should process our inputs next
+                if(branch.promises_in.Count > 0)
+                {
+                    int taken = 0;
+                    for(int i = 0; i < branch.promises_in.Count ; ++i)
+                    {
+                        //take the next promise and see if it's valid
+                        Promise p = branch.promises_in[i];
+                        if (p.time < 0) { ++taken; continue; }
+                        //Now make sure we know what happens at our head up until this tick (e.g let other inputs catch up)
+                        int p_dt = (int)(p.time - branch.LastResolvedInputTick);
+                        if (p_dt <= 1)
+                        {
+                            //we can take this promise
+                            ++taken;
+                            p.owner.promises_out.Dequeue(); //it is necessarily the first for the owner of the promise
+                            //And we can resolve the promising branch to the tick specified in the promise                               
+                            p.owner.LastResolvedOutputTick = long.Min(time, p.resolved_tick);
+                            u.FlagUpdate(p.owner); //the owner should be updated
+
+                            //p.owner.ticks_left = 1;
+                            
+                            //we can now resolve our input tick
+                            branch.LastResolvedInputTick = p.owner.LastResolvedOutputTick;
+                            for (int j = 0; j < in_count; j++)
                             {
-                                //merge the groups
-                                Item[] _new = new Item[ci.Items[i].Length + ci.Items[i - 1].Length];
-                                Array.Copy(ci.Items[i - 1], 0, _new, 0, ci.Items[i - 1].Length);
-                                Array.Copy(ci.Items[i], 0, _new, ci.Items[i - 1].Length, ci.Items[i].Length);
-                                ci.Items[i - 1] = _new;
-                                ci.Items.RemoveAt(i--);
+                                branch.LastResolvedInputTick = long.Min(inputs[j].LastResolvedOutputTick, branch.LastResolvedInputTick);
+                            }
+
+                            //now calculate where to place this promise
+                            //Basically we know when the promise is made
+                            //and we know where our last item is with respect to time
+                            //So we can simply push it ahead based on that time
+                            int onboarding_dt = (int)(p.time - branch.LastResolvedOutputTick);
+                            int dist = onboarding_dt * ProgressPerTick; //and the distance
+                            //now see if we can put the item into ourselves
+                            if (inv0.Put(p.item, dist, true))
+                            {
+                                inv0.Items.PeekLast().front.dir = p.item.dir;
+                                //and try to remove it from the inventory
+                                p.owner.Inventory.RemoveFromInventory(p.item, p.slot, -1);
+                                p.owner.ItemCount = p.owner.Inventory.Size();
+                                //see if we should update stuff
+                                //if (branch.WithinUpdateBounds) branch.ticks_left = 1;
+                                //else branch.ticks_left = inv0.UnitsFromTail / ProgressPerTick;
+
+                            }
+                            else break; //we are full so there's no need to continue
+                        }
+                        else
+                        {
+                            break;
+                        }
+                    }
+                    if (taken > 0)
+                    {
+                        branch.promises_in.RemoveRange(0, taken);
+                        branch.ItemCount = inv0.Items.Count;
+                    }
+                }
+
+                //now we can estimate the furthest possible future point until this branch loses predictability
+                //which is the first of: the current game time, and the time at which an item could leave the conveyor if it is inserted 1 tick from now
+                branch.NonHaltingTick = long.Min(time, branch.LastResolvedInputTick + inv0.PathLength / ProgressPerTick);
+
+                //so we can now push this far into the future
+                int delta = (int)(branch.NonHaltingTick - branch.LastResolvedOutputTick);
+
+
+                if (branch.ItemCount <= 0)
+                {
+                    //calculate the next best time
+                    //TODO this should set the next update time to the branch.Size * ProcessingTimePerBlock
+                    branch.ticks_left = int.Max(1, inv0.UnitsFromTail / ProgressPerTick);
+                    //no items so no output promises
+                    //so our output is our best halting time
+                    branch.LastResolvedOutputTick = branch.NonHaltingTick;
+                    ArrayPool<Branch>.Shared.Return(inputs);
+                    ArrayPool<Branch>.Shared.Return(outputs);
+
+                    return branch.LastResolvedOutputTick;
+                }
+                //we can only do this if we have no output promises
+                else if (branch.promises_out.Count == 0)
+                {
+
+                    //items, and no promises, but also no time
+                    if (delta <= 0)
+                    {
+                        branch.ticks_left = branch.WithinUpdateBounds ? 1 : int.Max(1, (out_count == 0 ? inv0.PathLength : inv0.UnitsFromTail) / ProgressPerTick);
+                        ArrayPool<Branch>.Shared.Return(inputs);
+                        ArrayPool<Branch>.Shared.Return(outputs);
+                        return time;
+                    }
+
+                    int furthest = inv0.AdvanceTicks(delta, ProgressPerTick);
+                    int remain = delta - furthest;
+
+                    branch.LastResolvedOutputTick += furthest;
+                    //we have ticks left.....
+
+
+                    if (remain > 0)
+                    {
+                        //we should only ever have one of these
+                        if (out_count == 0)
+                        {
+                            //force us to the remain time
+                            inv0.ForceToTicksUnaware(time, ProgressPerTick);
+                            branch.LastResolvedOutputTick = time;
+                        }
+                        else //make promises to our outputs
+                        {
+                            branch.StateFlag = (branch.StateFlag + 1) & 0x3FFFFFFF;
+
+                            //calculate the projection thing
+                            int track_length = 0;
+                            int items_fed = 0;
+                            int projection = remain * ProgressPerTick;
+                            Promise _p = null;
+                            int best_stack = -1;
+                            int best_left = -1;
+                            for (int i = 0; i < inv0.Items.Count && remain > 0; ++i)
+                            {
+                                best_stack = i;
+                                best_left = inv0.Items[i].Count();
+                                //project
+                                //start is at si.Items[i].gap + track_length
+                                track_length += inv0.Items[i].gap;
+                                remain -= inv0.Items[0].gap / ProgressPerTick; //consume the gap
+                                //and calculate the projected overflow distance
+                                int p_proj = projection - track_length;
+                                int n = 0;
+                                //now we need to resolve the projected overflow
+                                while (p_proj > 0)
+                                {
+                                    //If we already have a promise, then this promise will be advanced somewhat
+                                    if (_p != null) _p.resolved_tick = branch.LastResolvedOutputTick + track_length / ProgressPerTick;
+
+                                    //Now we can make a new promise
+                                    var p = new Promise()
+                                    {
+                                        item = inv0.Items[i].Peek(n),
+                                        time = branch.LastResolvedOutputTick + remain,
+                                        owner = branch,
+                                        ext = items_fed,
+                                        target = outputs[branch.StateFlag % out_count]
+                                    };
+                                    //We have to give it a direction and promise it forwards
+                                    p.item.dir = (byte)((2 + branch.Tail.dir) & 0x3);
+                                    outputs[branch.StateFlag % out_count].PromiseInput(p);
+                                    outputs[branch.StateFlag % out_count].ticks_left = 1;
+                                    ++items_fed;
+                                    //now we can consume from the projected future
+                                    p_proj -= Settings.Conveyors.ITEM_WIDTH;
+                                    projection -= Settings.Conveyors.ITEM_WIDTH;
+                                    track_length += Settings.Conveyors.ITEM_WIDTH;
+                                    remain = projection / ProgressPerTick;
+                                    _p = p;
+                                    best_left -= 1;
+                                }
+                            }
+                            //now we know how far the items were projected
+                            //we can see if this leaves us within the first item
+                            if (_p != null)
+                            {
+                                //basically this is really really annoying
+                                //but we need to resolve the current timepoint
+                                if (best_stack >= inv0.Items.Count - 1 && best_left <= 0)
+                                    _p.resolved_tick = branch.LastResolvedOutputTick + inv0.PathLength / ProgressPerTick;
+                                else _p.resolved_tick = branch.LastResolvedOutputTick + track_length / ProgressPerTick;
+                                branch.ticks_left = branch.WithinUpdateBounds ? 1 : int.Max(1, inv0.UnitsFromTail / ProgressPerTick);
                             }
                         }
                     }
                 }
+                //now the inventory can also be resolved to the branch tick
+                inv0.Time = branch.LastResolvedOutputTick;
 
-
-                //1. See how far forwards we can go
-                if (ci.Items.Count == 0)
+                //calculate the best halting time
+                if (branch.ticks_left <= 0)
                 {
-                    branch.TailTime = time;
+                    if (branch.ItemCount <= 0) int.Max(1, inv0.UnitsFromTail / ProgressPerTick);
+                    else if (branch.WithinUpdateBounds) branch.ticks_left = 1;
+                    else branch.ticks_left = int.Max(1, inv0.UnitsFromTail / ProgressPerTick);
                 }
-                else
+                if (branch.promises_out.TryPeek(out var po)) { u.FlagUpdate(po.target); u.FlagUpdate(branch); }
+
+                if (branch.LastResolvedOutputTick < time && (_t != branch.LastResolvedOutputTick || branch.promises_in.Count > 0)) u.FlagUpdate(branch);
+
+                //If there is head space, then we need to tell our inputs that they may be able to do stuff
+                if (_h != inv0.SpaceAtHead && _h < 0 && inv0.SpaceAtHead >= 0)
                 {
-
-                    //we can tick this item up to the last tick where it remains on the conveyor
-                    int full_ticks_left = (max_distance - ci.progresses[0]) / ProgressPerTick;
-                    //we consume this many ticks
-                    int ticks_consume = int.Min(delta_t, full_ticks_left);
-                    //so this is the best tick we can reach
-                    int best_tick = (branch.TailTime + ticks_consume) & Settings.TICK_MASK;
-                    //so this is the distance that the conveyor can push items ahead before a halt event
-                    int new_distance = ticks_consume * ProgressPerTick;
-                    for (int i = 0; i < ci.Items.Count; ++i)
-                    {
-                        //move it forwards as far as we can go
-                        ci.progresses[i] += new_distance;
-                        ci.Items[i][0].time = best_tick;
-                    }
-
-                    //now see if we can insert any promises
-                    for(int i = 0; i < branch.promises_in.Count; ++i)
-                    {
-                        int pos_est = branch.promises_in[i].ext;
-                    }
-
-
-                    //now if we have outputs
-                    if (branch.outputs.Count > 0)
-                    {
-                        //now everything is moved forwards, we need to make our promises
-                        int projected = delta_t * ProgressPerTick;
-                        for (int i = 0; i < ci.Items.Count; i++)
-                        {
-                            //find the projected location of the stack
-                            int n = ci.progresses[i] + projected;
-                            int overshoot = (n - max_distance);
-                            //now grab items out of the stack
-                            int index = 0;
-                        PromiseLoop:
-                            if (overshoot < 0) break;
-                            if (index >= ci.Items[i].Length) continue;
-
-                            //inherent round robining, though I don't think it's important for conveyors
-                            //it is important to establish the round robin behaviour
-                            branch.StateFlag = ((branch.StateFlag & Settings.TICK_MASK) + 1) % branch.outputs.Count;
-                            Branch target = branch.outputs[branch.StateFlag];
-                            if (branch.promises_out.Count > 0 && branch.promises_out.Last().owner != target) break;
-
-                            int dist_left = max_distance - ci.progresses[i] - index * Settings.CONVEYOR_SPACING;
-                            Promise p = new Promise()
-                            {
-                                owner = branch,
-                                item = ci.Items[i][index],
-                                time = (best_tick + (dist_left / ProgressPerTick)) & Settings.TICK_MASK, //ticks we can progress past the end
-                                ext = dist_left
-                            };
-                            target.PromiseInput(p);
-
-                            overshoot -= Settings.CONVEYOR_SPACING;
-                            index += 1;
-                            goto PromiseLoop;
-                        }
-                    }
-
-
-
+                    for(int i = 0; i < in_count; i++) u.FlagUpdate(inputs[i]);
                 }
+
+                //and we can return these stupid things too
+                ArrayPool<Branch>.Shared.Return(inputs);
+                ArrayPool<Branch>.Shared.Return(outputs);
             }
+
+
             return time;
-        }
 
 
-        public override int ProcessingTime()
-        {
-            return branch.Size * Settings.CONVEYOR_PRECISION / ProgressPerTick;
+
+
+
         }
+
+        
+
+
 
     }
 }
