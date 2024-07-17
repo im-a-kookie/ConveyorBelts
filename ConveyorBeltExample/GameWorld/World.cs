@@ -33,9 +33,8 @@ namespace ConveyorBeltExample.GameWorld
         //of say 16x16 = 256 chunks
         //If we travel 130K blocks (2^17) then we have 512 x 16 = 8192 chunks loaded
         //where one chunk is 128x128x16-ish bytes or 256kb
-        //which is no bueno hey
-        //since like loading 1000 chunks will mean 256mb data...
-        //So we probably need to chunk the block storage
+        //This is vaguely manageable but... Eventually the RAM cost could get insane
+        //So we may need to come up with some algorithms to minimize the loaded area
         /// <summary>
         /// The chunk array
         /// </summary>
@@ -56,6 +55,9 @@ namespace ConveyorBeltExample.GameWorld
         /// </summary>
         internal IndexedPool<Inventory> Inventories = new IndexedPool<Inventory>();
 
+        /// <summary>
+        /// The transport graph updater object
+        /// </summary>
         public BranchUpdater BranchUpdater;
 
         /// <summary>
@@ -63,8 +65,14 @@ namespace ConveyorBeltExample.GameWorld
         /// </summary>
         public WorldDataLayer DataManager;
 
+        /// <summary>
+        /// The layer manager for this world
+        /// </summary>
         public LayerManager LayerManager;
 
+        /// <summary>
+        /// A list of particles that are floating around. TODO do this differently, need to thing about it
+        /// </summary>
         public List<Particle> Particles = new List<Particle>();
 
 
@@ -85,6 +93,11 @@ namespace ConveyorBeltExample.GameWorld
 
         public KPoint Origin;
 
+        /// <summary>
+        /// Creates a new world with the given dimension name and ID
+        /// </summary>
+        /// <param name="name"></param>
+        /// <param name="id"></param>
         public World (string name, short id)
         {
             Dimension = name;
@@ -125,13 +138,21 @@ namespace ConveyorBeltExample.GameWorld
             }
         }
 
-        public int Index { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
+        /// <summary>
+        /// Something something gets an integer index.
+        /// </summary>
+        public int Index { get; set; }
 
+        /// <summary>
+        /// Creates a new world with the given dimension name
+        /// </summary>
+        /// <param name="dimensionName"></param>
         public World(string dimensionName)
         {
             this.Dimension = dimensionName;
             BranchUpdater = new BranchUpdater() { owner = this };
             LayerManager = new(this, Core.Instance.myCam, Core.Instance.GraphicsDevice.Viewport);
+            Index = 0;
         }
 
         /// <summary>
@@ -178,6 +199,13 @@ namespace ConveyorBeltExample.GameWorld
             return GetChunkFromChunkPos(new KPoint(point.x >> Settings.Engine.CHUNK_SIZE_PO2, point.y >> Settings.Engine.CHUNK_SIZE_PO2), c, forceLoad);
         }
 
+        /// <summary>
+        /// Gets a chunk from world coordinates using a given unsigned long (representing a condensed int/int point value)
+        /// </summary>
+        /// <param name="index"></param>
+        /// <param name="c"></param>
+        /// <param name="forceLoad"></param>
+        /// <returns></returns>
         public Chunk GetChunkFromWorldCoords(ulong index, Chunk c = null, bool forceLoad = true)
         {
             return GetChunkFromChunkPos(new KPoint((int)index >> Settings.Engine.CHUNK_SIZE_PO2, (int)(index >> (32 + Settings.Engine.CHUNK_SIZE_PO2))), c, forceLoad);
@@ -415,6 +443,12 @@ namespace ConveyorBeltExample.GameWorld
         static ConcurrentQueue<Chunk> RebuildLazy = new();
         static TaskChannel tc = new TaskChannel(4);
 
+        /// <summary>
+        /// Provides a helper method to divide and floor intereger values with correct truncation based on their signs.
+        /// </summary>
+        /// <param name="a"></param>
+        /// <param name="b"></param>
+        /// <returns></returns>
         public static int FlooredIntDiv(int a, int b)
         {
             return (a / b - Convert.ToInt32(((a < 0) ^ (b < 0)) && (a % b != 0)));
@@ -482,6 +516,7 @@ namespace ConveyorBeltExample.GameWorld
                 Core.Instance.myCam.VisibleInt.Width / 8, Core.Instance.myCam.VisibleInt.Height / 8);
             view.Inflate(16, 16);
 
+            //Render all of the cached layers
             LayerManager.RenderCaches(view, c.myCam, c.GraphicsDevice.Viewport);
 
 
@@ -489,16 +524,16 @@ namespace ConveyorBeltExample.GameWorld
 
             c.myCam.StartBatch(Core.Instance._spriteBatch, null, false);
 
+            //draw the entire texture page so that we can see it and make sure it works properly
             Core.Instance._spriteBatch.Draw(SpriteManager.TexturePage, new Rectangle(-266, -256, SpriteManager.TexturePage.Width, SpriteManager.TexturePage.Height), SpriteManager.TexturePage.Bounds, Color.White);
 
 
-
-            //this is cool just use world tick over something
+            //this is cool just use world tick divided by something
+            //Draw a furnace with smoke chugga chugga just to prove that we can (testing animation and furnaces
             int f = (int)((Tick / 4) & 0b111);
             var fur_chim = SpriteManager.SpriteMappings["furnace_chimney"];
             var fur_body = SpriteManager.SpriteMappings["furnace"];
             Core.Instance._spriteBatch.Draw(SpriteManager.TexturePage, new Rectangle(-80, -80, 16, 16), fur_body[1].R, Color.White);
-
             Core.Instance._spriteBatch.Draw(SpriteManager.TexturePage, new Rectangle(-80, -82, 16, 16), fur_chim[f].R, Color.White);
             if (f == 0) Particles.Add(new ConveyorEngine.Particle("smoke", new Vector2(-73, -80), new Vector2(-0.01f, -5f), 4));
 
@@ -508,9 +543,12 @@ namespace ConveyorBeltExample.GameWorld
             c.myCam.StartBatch(Core.Instance._spriteBatch, null);
             for(int i = 0; i < Particles.Count; i++)
             {
+                //get the given particle and move it
                 var p = Particles[i];
                 p.pos += p.velocity * (float)t.ElapsedGameTime.TotalSeconds;
+                //tick down it's lifespan
                 p.life = float.Max(0, p.life - (float)t.ElapsedGameTime.TotalSeconds);
+                //now get and draw its sprite
                 var r = SpriteManager.SpritesByIndex[Particles[i].sprite];
                 var rr = new Rectangle(r.X + 16 * (int)((r.Width / 16) * (0.999f - p.life / p._start_life)), r.Y, 16, 16);
                 Core.Instance._spriteBatch.Draw(SpriteManager.TexturePage, Particles[i].pos - new Vector2(8, 8), rr, Color.White);

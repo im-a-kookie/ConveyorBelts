@@ -22,6 +22,20 @@ using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace ConveyorBeltExample.Graphing
 {
+    /*
+     The branch calculations make up a huge portion of the conveyor belt logic, and in fact once the branches have been constructed
+    It's possible to approach the conveyor problem in many different ways.
+
+    Ultimately, the graphing logic boils down to a very simple heuristical predicate:
+    
+    A conveyor tile should never receive inputs from more than 1 direction unless it is the head of a branch.
+
+    So, when conveyor belts are placed against each other, we greedily connect them in accordance to the above.
+    When conveyor belts butt into other conveyor belts, we cut the branch so that the intersection is a new head
+    
+    Done. Simple. That's all there is to it. Now let's write 1000 lines of code to make it happen hahaha ha... ha
+     */ 
+
     public class Branch : Indexable
     {
         
@@ -29,10 +43,6 @@ namespace ConveyorBeltExample.Graphing
         {
             
         }
-
-
-
-
 
 
 
@@ -94,7 +104,8 @@ namespace ConveyorBeltExample.Graphing
         public long LastResolvedInputTick = 0;
 
         /// <summary>
-        /// A thing for calculating stuff
+        /// A thing for calculating stuff. Basically this is a work value
+        /// that tells us how to render things over time
         /// </summary>
         public float RenderWorkTicks = 0f;
         
@@ -129,10 +140,20 @@ namespace ConveyorBeltExample.Graphing
         /// </summary>
         public int ticks_left;
 
+        /// <summary>
+        /// Flags this branch to be updated immediately. 
+        /// 
+        /// <para>This is done by setting the remaining tick time to 0, note that branches are
+        /// swept every frame, we just don't do anything with a lot of them</para>
+        /// </summary>
         public void FlagImmediateUpdate()
         {
             ticks_left = 0;
         }
+        /// <summary>
+        /// Flags this branch to be updated after the given number of ticks
+        /// </summary>
+        /// <param name="delay"></param>
         public void FlagUpdate(int delay)
         {
             ticks_left = delay;
@@ -140,19 +161,55 @@ namespace ConveyorBeltExample.Graphing
 
         public int flagged = 0;
 
+        /// <summary>
+        /// The underlying collection of inputs
+        /// </summary>
         public Deque<int>[] RawInputs = [new(), new(), new(), new()];
+        /// <summary>
+        /// The underlying collection of outputs
+        /// </summary>
         public Deque<int>[] RawOutputs = [new(), new(), new(), new()];
         public int _inventory_index;
 
+        /// <summary>
+        /// Gets a list of inputs by ID at the given face
+        /// </summary>
+        /// <param name="d"></param>
+        /// <returns></returns>
         public Deque<int> GetInputIds(Dir d) => GetInputIds((int)d);
+        /// <summary>
+        /// Gets the input IDs from the given face
+        /// </summary>
+        /// <param name="d"></param>
+        /// <returns></returns>
         public Deque<int> GetInputIds(int d) => RawInputs[d & 0x3];
 
+        /// <summary>
+        /// Gets the given inputs as branches. The branches are returned as arrays along with the count.
+        /// 
+        /// <para><b>NOTE:</b> The length of the array is NOT the number of inputs.</para>
+        /// </summary>
+        /// <param name="d"></param>
+        /// <param name="branches"></param>
+        /// <param name="count"></param>
         public void GetInputs(Dir d, out Branch[] branches, out int count) => GetInputs((int)d, out branches, out count);
+
+        /// <summary>
+        /// Gets the given inputs as branches. The branches are returned as arrays along with the count.
+        /// 
+        /// <para><b>NOTE:</b> The length of the array is NOT the number of inputs.</para>
+        /// </summary>
+        /// <param name="d"></param>
+        /// <param name="branches"></param>
+        /// <param name="count"></param>
         public void GetInputs(int d, out Branch[] branches, out int count)
         {
+            //rent a new array
             branches = ArrayPool<Branch>.Shared.Rent(1);
             count = 0;
-
+            //get all of the input IDs and iterate through them
+            //remember that we're using Deque, but to speed things up,
+            //we're going to manually handle the deque logic
             var g = GetInputIds(d);
             for (int j = g.headDeleted; j < g.head.Count; ++j)
             {
@@ -168,6 +225,7 @@ namespace ConveyorBeltExample.Graphing
                     branches[count++] = w.Branches[g.head[j]];
                 }
             }
+            //and again for the tail
             for (int j = g.tailDeleted; j < g.tail.Count; ++j)
             {
                 if (count >= branches.Length)
@@ -181,6 +239,11 @@ namespace ConveyorBeltExample.Graphing
             }
         }
 
+        /// <summary>
+        /// Gets the number of inputs that match the given predicate (which can be null, in which case all inputs are counted)
+        /// </summary>
+        /// <param name="x"></param>
+        /// <returns></returns>
         public int GetInputCount(Predicate<Branch> x = null)
         {
             int count = 0;
@@ -205,6 +268,11 @@ namespace ConveyorBeltExample.Graphing
             return count;
         }
 
+        /// <summary>
+        /// Gets all of the inputs to this branch
+        /// </summary>
+        /// <param name="branches"></param>
+        /// <param name="count"></param>
         public void GetInputs(out Branch[] branches, out int count)
         {
             branches = ArrayPool<Branch>.Shared.Rent(1);
@@ -212,6 +280,7 @@ namespace ConveyorBeltExample.Graphing
             for (int i = 0; i < 4; i++)
             {
                 var g = GetInputIds(i);
+                //handle deque logic
                 for (int j = g.headDeleted; j < g.head.Count; ++j)
                 {
                     if (g.head[j] > 0)
@@ -240,10 +309,34 @@ namespace ConveyorBeltExample.Graphing
             }
         }
 
+        /// <summary>
+        /// Get all of the outputs based on the given direction
+        /// </summary>
+        /// <param name="d"></param>
+        /// <returns></returns>
         public Deque<int> GetOutputIds(Dir d) => GetOutputIds((int)d);
+        /// <summary>
+        /// Get all of the outputs based on the given direction
+        /// </summary>
+        /// <param name="d"></param>
+        /// <returns></returns>
         public Deque<int> GetOutputIds(int d) => RawOutputs[d & 0x3];
-
+        /// <summary>
+        /// Gets all of the outputs as branches.
+        /// 
+        /// <para>Note: The branches array may be incorrectly sized. Count refers to the correct number of branches.</para>
+        /// </summary>
+        /// <param name="d"></param>
+        /// <param name="branches"></param>
+        /// <param name="count"></param>
         public void GetOutputs(Dir d, out Branch[] branches, out int count) => GetOutputs((int)d, out branches, out count);
+        /// <summary>
+        /// Gets all of the outputs as branches.
+        /// 
+        /// <para>Note: The branches array may be incorrectly sized. Count refers to the correct number of branches.</para>
+        /// </summary>
+        /// <param name="d"></param>
+        /// <param name="branches"></param>
         public void GetOutputs(int d, out Branch[] branches, out int count)
         {
             branches = ArrayPool<Branch>.Shared.Rent(1);
@@ -276,6 +369,12 @@ namespace ConveyorBeltExample.Graphing
             }
             
         }
+
+        /// <summary>
+        /// Counts the number of outputs which match the given predicate
+        /// </summary>
+        /// <param name="x"></param>
+        /// <returns></returns>
         public int GetOutputCount(Predicate<Branch> x = null)
         {
             int count = 0;
@@ -299,6 +398,11 @@ namespace ConveyorBeltExample.Graphing
             }
             return count;
         }
+        /// <summary>
+        /// Gets all outputs into an array. Note: the length of the array may not be correct, and count should be used instead.
+        /// </summary>
+        /// <param name="branches"></param>
+        /// <param name="count"></param>
         public void GetOutputs(out Branch[] branches, out int count)
         {
             branches = ArrayPool<Branch>.Shared.Rent(1);
@@ -350,7 +454,7 @@ namespace ConveyorBeltExample.Graphing
         }
 
         /// <summary>
-        /// Adds the given branch as an output of this one, and this as an input to that branch.
+        /// Couples this branch to branch b, where this branch outputs into b.
         /// </summary>
         /// <param name="b"></param>
         /// <param name="d"></param>
@@ -362,6 +466,11 @@ namespace ConveyorBeltExample.Graphing
             b.AddInput(this, d.Opposite());
         }
 
+        /// <summary>
+        /// Decouple this branch from branch b, where branch b feeds into this branch
+        /// </summary>
+        /// <param name="b"></param>
+        /// <param name="d"></param>
         public void RemoveInput(Branch b, Dir d)
         {
             if (RawInputs[(int)d].Remove(b.Index))
@@ -371,7 +480,7 @@ namespace ConveyorBeltExample.Graphing
         }
 
         /// <summary>
-        /// Adds the given branch as an output of this one, and this as an input to that branch.
+        /// Decouples this branch from branch b, where this branch outputs into b.
         /// </summary>
         /// <param name="b"></param>
         /// <param name="d"></param>
@@ -401,6 +510,9 @@ namespace ConveyorBeltExample.Graphing
             }
         }
 
+        /// <summary>
+        /// Clears all outputs
+        /// </summary>
         public void ClearOutput()
         {
             for (int i = 0; i < 4; i++)
@@ -416,6 +528,9 @@ namespace ConveyorBeltExample.Graphing
             }
         }
 
+        /// <summary>
+        /// Clears all inputs and outputs
+        /// </summary>
         public void ClearInOut()
         {
             ClearInput();
@@ -442,10 +557,14 @@ namespace ConveyorBeltExample.Graphing
 
         
         /// <summary>
-        /// The world bounds of this branch
+        /// The world bounds of this branch. Every tile in this branch falls within this rectangle.
         /// </summary>
         public Rectangle Bounds = new Rectangle(0, 0, 0, 0);
 
+        /// <summary>
+        /// This is pretty filthy, but it's essentially just a holding variable to store
+        /// the direction from which  the last input came to us.
+        /// </summary>
         public int StateFlag = 0;
 
         public Queue<Promise> promises_out = new Queue<Promise>();
@@ -582,8 +701,18 @@ namespace ConveyorBeltExample.Graphing
             Bounds = new Rectangle(minX, minY, 1 + maxX - minX, 1 + maxY - minY);
         }
 
+        /// <summary>
+        /// Quick dirty color randomizer
+        /// </summary>
+        /// <param name="index"></param>
+        /// <returns></returns>
         public static Color MakeColor(int index)
         {
+            //turns out new Random().Next() is absurdly expensive
+            //Imagine processing tens of thousands of tiles with tens of thousands of items on top, and 40% of the
+            //CPU time is actually just being used to make the conveyor belt branches visually distinct.
+            //So
+            //Enter this filthy spammation. It's only for debugging anyway
             return Color.FromNonPremultiplied(
                 127 + (((index * 27) ^ 287538253 >> 9) & 0x7F),
                 127 + (((index * 12) ^ 385792837 >> 7) & 0x7F),
@@ -592,11 +721,23 @@ namespace ConveyorBeltExample.Graphing
 
         }
 
+        /// <summary>
+        /// Sets the color for this branch.
+        /// </summary>
         public void SetColor()
         {
+            //We do need to cache the color, otherwise the conveyor belts turn into disco machines
             if (Index <= 0) ForScience = Color.White;
             else ForScience = MakeColor(Index);
         }
+
+        /**
+         After several hundred lines of pretty much just endless boilerplate, we're finally at the good part.
+
+        The following few methods handle almost all of the heavy lifting with the graph creation and management.
+        It all happens in literally just like 3 methods;
+         */ 
+
 
         /// <summary>
         /// Splits the branch so that we become a new branch starting with block B.
@@ -640,6 +781,10 @@ namespace ConveyorBeltExample.Graphing
             Chunk c = w.GetChunkFromWorldCoords(pos);
             for (int i = 0; i < Size; i++)
             {
+                //this looks filthy, but it's worth it from a performance perspective,
+                //Since we can undercut a lot of the things
+                //and just push the changes that we need to change,
+                //without any rigmaroll of setting an actual tile in the world
                 c = w.GetChunkFromWorldCoords(members[i].pos, c);
                 members[i].branchindex = Index;
                 int mask = 1 << members[i].dir;
@@ -649,6 +794,7 @@ namespace ConveyorBeltExample.Graphing
                 members[i].mask = (byte)mask;
             }
 
+            //and the same for everything inthe new branch
             for (int i = 0; i < bN.Size; i++)
             {
                 c = w.GetChunkFromWorldCoords(bN.members[i].pos, c);
@@ -707,7 +853,7 @@ namespace ConveyorBeltExample.Graphing
         }
 
         /// <summary>
-        /// Merges this branch forwards and backwards
+        /// Merges this branch forwards and backwards as far as possible.
         /// </summary>
         public void MergeBranch(World w, Chunk cache)
         {
@@ -768,7 +914,7 @@ namespace ConveyorBeltExample.Graphing
                 }
             }
 
-
+            //Now we have all of the connected crap, let's merge them (if there was any stufffff)
             if (available.Count <= 1) return;
             IsBuffered = false;
 
@@ -784,6 +930,7 @@ namespace ConveyorBeltExample.Graphing
                 {
                     ni.Append(available[i].Inventory);
                 }
+                //set the index appropriately
                 _inventory_index = ni.Index;
                 ItemCount = ni.Size();
             }
@@ -812,7 +959,8 @@ namespace ConveyorBeltExample.Graphing
             {
                 c = w.GetChunkFromWorldCoords(members[i].pos, c); //update cache
                 members[i].branchindex = Index; //update index in the branch member
-                int mask = 1 << members[i].dir;
+                int mask = 1 << members[i].dir; //get the new mask
+                //and appropriately consider the directionality of the previous belt piece
                 if (i > 0) mask |= (1 << ((members[i - 1].dir + 2) & 0x3));
                 c.SetBranchAndData(members[i].pos, Index, (uint)mask);
                 c.Flag(LayerManager.ConveyorLayer);

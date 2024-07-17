@@ -56,6 +56,7 @@ namespace SpriteSheetHelper
             pDrawing.KeyDown += Editor_KeyDown1;
         }
 
+        //Handles the editor keydown event
         private void Editor_KeyDown1(object? sender, KeyEventArgs e)
         {
             if (!CanUI()) return;
@@ -128,9 +129,11 @@ namespace SpriteSheetHelper
 
         private void pDrawing_Paint(object sender, PaintEventArgs e)
         {
+            //draw it nicely
             e.Graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.NearestNeighbor;
             e.Graphics.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.Half;
 
+            //go through each sheet in the list of available sheets
             int n = cbSheetSelector.SelectedIndex;
             if (n >= 0 && n < SheetPaths.Count)
             {
@@ -141,12 +144,13 @@ namespace SpriteSheetHelper
                         pDrawing.Tag = Image.FromFile(p);
                 }
 
+                //if we actuallyhave a tag for the main viewer panel then draw it
                 if (pDrawing.Tag != null && pDrawing.Tag is Image i)
                 {
 
-
+                    //clear stuff
                     e.Graphics.Clear(pDrawing.BackColor);
-                    //integral scale
+                    //integral scale, we want crisp pixel graphics
                     int s = Math.Min((int)pDrawing.Width / i.Width, (int)pDrawing.Height / i.Height);
                     int w = (pDrawing.Width - s * i.Width) / 2;
                     int h = (pDrawing.Height - s * i.Height) / 2;
@@ -183,6 +187,7 @@ namespace SpriteSheetHelper
             }
             else
             {
+                //We did have an image, but we're not selecting anything, so dispose
                 if (pDrawing.Tag != null && pDrawing.Tag is Image i)
                 {
                     i.Dispose();
@@ -283,12 +288,14 @@ namespace SpriteSheetHelper
 
             if (pDrawing.Tag != null && pDrawing.Tag is Image i)
             {
-                //get the location
+                //get the location for the preview image
                 float s = Math.Min((int)pDrawing.Width / i.Width, (int)pDrawing.Height / i.Height);
                 int w = (int)((pDrawing.Width - s * i.Width) / 2);
                 int h = (int)((pDrawing.Height - s * i.Height) / 2);
+                //and the bounding rectangles
                 Rectangle iBounds = new Rectangle(w, h, (int)(s * i.Width), (int)(s * i.Height));
                 var iR = new Rectangle(0, 0, i.Width, i.Height);
+                //Now make sure that the bounds actually contains the selection
                 if (iR.Contains(Selected) && Selected.Width > 0 && Selected.Height > 0)
                 {
                     var sR_ = new Rectangle(Selected.X, Selected.Y, Selected.Width, Selected.Height);
@@ -314,6 +321,7 @@ namespace SpriteSheetHelper
 
         private void textBox1_TextChanged(object sender, EventArgs e)
         {
+            //we changed the text, so update the thing properly
             if (SelectedSprite != null && SelectedNode != null)
             {
                 SelectedSprite.name = textBox1.Text;
@@ -469,7 +477,11 @@ namespace SpriteSheetHelper
 
 
 
-
+        /// <summary>
+        /// Parses a string thingimy into a list of data things, keyed in the same way as constructed in exportToolStripblahblah click.
+        /// </summary>
+        /// <param name="s"></param>
+        /// <returns></returns>
         public Dictionary<string, string> Parse(Span<char> s)
         {
             Dictionary<string, string> output = new();
@@ -515,6 +527,11 @@ namespace SpriteSheetHelper
 
         }
 
+        /// <summary>
+        /// Unspools a stringification of a rectangle
+        /// </summary>
+        /// <param name="s"></param>
+        /// <returns></returns>
         public static Rectangle Unspool(string s)
         {
             var ss = s.Split(',').Select(x => x.Trim()).Where(x => x.Length > 0).ToArray();
@@ -529,7 +546,10 @@ namespace SpriteSheetHelper
             }
         }
 
-
+        /// <summary>
+        /// Imports the data from the given String
+        /// </summary>
+        /// <param name="s"></param>
         public void Import(string s)
         {
 

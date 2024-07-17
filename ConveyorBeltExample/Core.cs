@@ -242,6 +242,7 @@ namespace ConveyorBeltExample
                         }
                         else //we do not have a previous place
                         {
+                            //get the block and check if we need to place a new one
                             var d = world.GetBlock(wp);
                             if (d.id != 2 || d.dir != (byte)dir)
                             {
@@ -260,6 +261,8 @@ namespace ConveyorBeltExample
 
                 if (clicked)
                 {
+                    //we were clicked, and have now let go of the button,
+                    //So we should complete any drag actions and break out of the thing
                     clicked = false;
                     var target = new KPoint(locked_axis_x ? locked_x_val : wp.x, locked_axis_y ? locked_y_val : wp.y);
                     if (LastPlace == null || target != LastPlace.Value)
@@ -285,12 +288,17 @@ namespace ConveyorBeltExample
         }
 
 
-
+        /// <summary>
+        /// The main update method for the game engine
+        /// </summary>
+        /// <param name="gameTime"></param>
         protected override void Update(GameTime gameTime)
         {
+            //exit when the button is pressed
             if (GamePad.GetState(PlayerIndex.One).Buttons.Back == ButtonState.Pressed || Keyboard.GetState().IsKeyDown(Keys.Escape))
                 Exit();
 
+            //keep a running average of the frame times and memory usage, and put them to the window title
             n += (int)gameTime.ElapsedGameTime.TotalMicroseconds;
             if (n > 300 * 1000)
             {
@@ -303,9 +311,6 @@ namespace ConveyorBeltExample
                 for (int i = 0; i < utimes.Count; i++) worstUpdate = Math.Max(worstUpdate, utimes[i]);
 
                 Window.Title = "Debug. Render: " + Math.Round(render_avg * 10) / 10f + "ms, Update:: " + Math.Round(update_avg * 10f) /10f + "ms, Mem: " + Math.Round(((GC.GetTotalMemory(true) / 1024) / 102.4f))/10f + "MB, Wd: " + Math.Round(worstDraw * 10) + " , WU:" + Math.Round(worstUpdate * 10);
-               
-                
-
             }
 
             UpdateWatch.Restart();
@@ -315,16 +320,20 @@ namespace ConveyorBeltExample
 
             world.MarkNeighborUpdates(new KPoint(myCam.ScreenPointToGrid(Mouse.GetState().Position)));
             
+            //allow camera to be moved with arrow keys
             if (Keyboard.GetState().IsKeyDown(Keys.Up)) dir = Dir.NORTH;
             if (Keyboard.GetState().IsKeyDown(Keys.Down)) dir = Dir.SOUTH;
             if (Keyboard.GetState().IsKeyDown(Keys.Left)) dir = Dir.WEST;
             if (Keyboard.GetState().IsKeyDown(Keys.Right)) dir = Dir.EAST;
 
+            //handle mouse dragging
             if (Keyboard.GetState().IsKeyDown(Keys.LeftControl) || Keyboard.GetState().IsKeyDown(Keys.RightControl))
             {
                 HandleMouseDrags(Keyboard.GetState().IsKeyDown(Keys.LeftShift) || Keyboard.GetState().IsKeyDown(Keys.RightShift));
             }
 
+            //If we pressed the left button while halding the alt key, then we're gonna insert items
+            //This is just for debugging
             if (Mouse.GetState().LeftButton == ButtonState.Pressed && Keyboard.GetState().IsKeyDown(Keys.LeftAlt))
             {
                 //get the x/y in the world

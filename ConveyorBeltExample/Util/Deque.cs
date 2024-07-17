@@ -47,17 +47,25 @@ namespace ConveyorEngine.Util
         public int tailDeleted;
 
         // properties
-
+        /// <summary>
+        /// Returns the capacity of the list (not important for most stuff)
+        /// </summary>
         public int Capacity
         {
             get { return head.Capacity + tail.Capacity; }
         }
 
+        /// <summary>
+        /// Returns the number of items in the list
+        /// </summary>
         public int Count
         {
             get { return head.Count + tail.Count - headDeleted - tailDeleted; }
         }
 
+        /// <summary>
+        /// Enumerates the list in reverse order
+        /// </summary>
         public IEnumerable<T> Reversed
         {
             get
@@ -74,12 +82,20 @@ namespace ConveyorEngine.Util
             }
         }
 
+        /// <summary>
+        /// Creates a new empty Deque
+        /// </summary>
         public Deque()
         {
             head = new List<T>();
             tail = new List<T>();
         }
 
+        /// <summary>
+        /// Creates a new Deque with the given initial capacity
+        /// </summary>
+        /// <param name="capacity"></param>
+        /// <exception cref="ArgumentException"></exception>
         public Deque(int capacity)
         {
             if (capacity < 0) throw new ArgumentException("Capacity cannot be negative");
@@ -89,10 +105,21 @@ namespace ConveyorEngine.Util
             tail = new List<T>(temp2);
         }
 
+        /// <summary>
+        /// Creates a new Dequeue from the given collection.
+        /// </summary>
+        /// <param name="backCollection"></param>
         public Deque(IEnumerable<T> backCollection) : this(backCollection, null)
         {
         }
 
+        /// <summary>
+        /// Creates a new Deque using two collections, which are placed into the back and front respectively (though
+        /// in an implementation sense, this is not significant to he outwards behaviour of the collection)
+        /// </summary>
+        /// <param name="backCollection"></param>
+        /// <param name="frontCollection"></param>
+        /// <exception cref="ArgumentException"></exception>
         public Deque(IEnumerable<T> backCollection, IEnumerable<T> frontCollection)
         {
             if (backCollection == null && frontCollection == null) throw new ArgumentException("Collections cannot both be null");
@@ -168,6 +195,9 @@ namespace ConveyorEngine.Util
             tail.AddRange(range);
         }
 
+        /// <summary>
+        /// Empties this queue
+        /// </summary>
         public void Clear()
         {
             head.Clear();
@@ -176,6 +206,11 @@ namespace ConveyorEngine.Util
             tailDeleted = 0;
         }
 
+        /// <summary>
+        /// Returns true if the collection contains the given item, otherwise returns false
+        /// </summary>
+        /// <param name="item"></param>
+        /// <returns></returns>
         public bool Contains(T item)
         {
             for (int i = headDeleted; i < head.Count; i++)
@@ -191,6 +226,11 @@ namespace ConveyorEngine.Util
             return false;
         }
 
+        /// <summary>
+        /// Attempts to remove the given iteem from the collection. Returns true if successful, otherwise false.
+        /// </summary>
+        /// <param name="item"></param>
+        /// <returns></returns>
         public bool Remove(T item)
         {
             for (int i = headDeleted; i < head.Count; i++)
@@ -215,7 +255,12 @@ namespace ConveyorEngine.Util
         }
 
 
-
+        /// <summary>
+        /// Copies this collection to the given array, starting from the given index
+        /// </summary>
+        /// <param name="array"></param>
+        /// <param name="index"></param>
+        /// <exception cref="ArgumentException"></exception>
         public void CopyTo(T[] array, int index)
         {
             ArgumentNullException.ThrowIfNull(array);
@@ -229,6 +274,10 @@ namespace ConveyorEngine.Util
             }
         }
 
+        /// <summary>
+        /// Gets an enumerator that provides the items of this collection in the expected (queue) order
+        /// </summary>
+        /// <returns></returns>
         public IEnumerator<T> GetEnumerator()
         {
             if (head.Count - headDeleted > 0)

@@ -30,7 +30,12 @@ namespace ConveyorEngine.Graphics.Conveyors
         public static PointRectangle[][][][] ConveyorParts;
 
         /// <summary>
-        /// Generate the texture buffer.
+        /// Generate the texture buffer. Conveyors are constructed from one very small texture, and while this
+        /// texture contains all of the important detail, we need to do extensive cutting and slicing to make
+        /// it all look right.
+        /// 
+        /// <para>In theory this same method can be used on the fly, but it's MUCH more efficient to just cache
+        /// every single possible tile state for the conveyor belt. </para>
         /// </summary>
         /// <param name="sb"></param>
         /// <param name="texture"></param>
@@ -39,6 +44,7 @@ namespace ConveyorEngine.Graphics.Conveyors
         {
             //1. Prepare the buffer sizing, we need to calculate the sizing for the buffer
 
+            //conveyors nominally have 4 frames of animation
             buffers = new RenderTarget2D[4];
             for (int frame = 0; frame < 4; frame++)
             {
@@ -59,11 +65,15 @@ namespace ConveyorEngine.Graphics.Conveyors
                         int posX = (dir | (mask << 2)) & 7;
                         int posY = (dir | (mask << 2)) / 8;
                         //the x/y/z is equal to 4x16x4 
+                        
+                        //The corners need to have some masking effects applied,
+                        //So that the conveyor belt movey thing is consistent with how the items move
                         if (IsMaskableCorner((Dir)dir, mask))
                         {
                             corners.Add(new Corner(posX, posY, (Dir)dir, mask, frame, -1));
                         }
 
+                        //Now iterate through every part of the conveyor image and stamp them into the buffer
                         for (int part = 0; part < ConveyorBounds[dir][mask][frame].Length; part++)
                         {
                             var r = ConveyorBounds[dir][mask][frame][part];
@@ -84,7 +94,8 @@ namespace ConveyorEngine.Graphics.Conveyors
 
                 //Corners are simple enough. We found them all before,
                 //But they have two animated components :O
-                //To solve this, we will stencil half of one direction over the other direction.
+                //To solve this, we will take the original sprite happily animated in the first direction
+                //Then we will stencil half of the other direction over the top
                 foreach (var corner in corners)
                 {
                     //
@@ -100,12 +111,13 @@ namespace ConveyorEngine.Graphics.Conveyors
                 }
                 sb.End();
 
-                //Now we go back and stamp out half of it
+                //Now we go back and stamp out half of it using a simple shader
                 var mask_tex = new RenderTarget2D(sb.GraphicsDevice, 64, 64);
                 sb.GraphicsDevice.SetRenderTarget(mask_tex);
                 sb.GraphicsDevice.Clear(Color.FromNonPremultiplied(0, 0, 0, 0));
                 sb.Begin();
 
+                //go through every corner
                 foreach (var corner in corners)
                 {
                     //draw it
@@ -227,19 +239,26 @@ namespace ConveyorEngine.Graphics.Conveyors
         public static SpriteEffects? GetMaskingEffect(Dir d, int mask)
         {
             //we block off the output direction
+            //so basically just rotate around and handle the texture transformations etc
             mask |= 1 << (int)d;
             switch (d)
             {
+                //we're pointing north
                 case Dir.NORTH:
+                    //Check if the mask has one, and only one input, from the sides (easy/west)
                     if (mask == (1 << (int)Dir.NORTH | 1 << (int)Dir.EAST))
                     {
+                        //From the east, we need to flip horizontally
+                        //and from the north, vertically
                         return SpriteEffects.FlipHorizontally | SpriteEffects.FlipVertically;
                     }
                     else if (mask == (1 << (int)Dir.NORTH | 1 << (int)Dir.WEST))
                     {
+                        //from the west, the mask only needs a vertical flip
                         return SpriteEffects.FlipVertically;
                     }
                     break;
+                    //and repeat the above for each other direction
                 case Dir.EAST:
                     if (mask == (1 << (int)Dir.EAST | 1 << (int)Dir.NORTH))
                     {

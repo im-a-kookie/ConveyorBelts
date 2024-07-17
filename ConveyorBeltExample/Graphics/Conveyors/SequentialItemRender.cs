@@ -62,12 +62,14 @@ namespace ConveyorEngine.Graphics.Conveyors
                         {
                             int block = (branch.Size - (track_pos) / Settings.Conveyors.CONVEYOR_PRECISION) - 1;
                             int step;
+                            //calculate the length of the block of items and get the right step
                             if (block >= branch.Size)
                             {
                                 block = branch.Size - 1;
                                 step = Settings.Conveyors.CONVEYOR_PRECISION;
                             }
                             else step = ((branch.Size - block) * Settings.Conveyors.CONVEYOR_PRECISION) - track_pos;
+                            //now make sure that we fit within the branch that we're drawing and that everything lines up
                             if (block >= 0 && block < branch.Size && step >= 0 && step <= Settings.Conveyors.CONVEYOR_PRECISION)
                             {
                                 Vector2 pos;

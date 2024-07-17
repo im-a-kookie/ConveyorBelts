@@ -50,9 +50,15 @@ namespace ConveyorEngine.Graphics
         ConcurrentQueue<Chunk> immediate_chunks = new();
         ConcurrentQueue<Chunk> pending_chunks = new();
 
-
+        /// <summary>
+        /// Creates a new layer manager with the given camera and viewport
+        /// </summary>
+        /// <param name="w"></param>
+        /// <param name="c"></param>
+        /// <param name="v"></param>
         public LayerManager(World w, Camera c, Viewport v)
         {
+            //set up the projection matrices so that it can render correct.y
             this.w = w;
             effect = new BasicEffect(Core.Instance.GraphicsDevice);
             effect.World = Matrix.Identity;
@@ -72,6 +78,11 @@ namespace ConveyorEngine.Graphics
             effect.Projection = c.Transform * _projection;
         }
 
+        /// <summary>
+        /// Flags the given chunk to be updated at the specified layer.
+        /// </summary>
+        /// <param name="c"></param>
+        /// <param name="layer"></param>
         public void FlagChunk(Chunk c, int layer = -1)
         {
             if (layer == -1) layer = ConveyorLayer;
@@ -133,11 +144,18 @@ namespace ConveyorEngine.Graphics
             }
         }
 
+        /// <summary>
+        /// Renders all of the caches in this layer to the given camera and viewport.
+        /// </summary>
+        /// <param name="view"></param>
+        /// <param name="c"></param>
+        /// <param name="v"></param>
         public void RenderCaches(Rectangle view, Camera c, Viewport v)
         {
             Chunk[] chunks = ArrayPool<Chunk>.Shared.Rent((2 + (view.Width / Settings.Engine.CHUNK_SIZE)) * (2 + (view.Height / Settings.Engine.CHUNK_SIZE)));
             int count = 0;
 
+            //Grab all of the chunks that fall within the current viewport
             for (int i = World.FlooredIntDiv(view.Left, Settings.Engine.CHUNK_SIZE); i <= World.FlooredIntDiv(view.Right, Settings.Engine.CHUNK_SIZE); i++)
             {
                 //check every chunk touched by the branch
@@ -189,6 +207,7 @@ namespace ConveyorEngine.Graphics
                 }
             }
 
+            //now go through and draw each layer
             for (int layer = 0; layer < RenderLayers.Count; ++layer)
             {
 

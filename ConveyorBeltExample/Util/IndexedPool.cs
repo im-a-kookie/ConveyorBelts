@@ -38,6 +38,9 @@ namespace ConveyorEngine.Util
         public T[] Items;
         private ConcurrentQueue<int> indices = new();
 
+        /// <summary>
+        /// Trigger a rebuild of the item cache, ensuring good indexation etc
+        /// </summary>
         public void RebuildCache()
         {
             if (_cached == null) _cached = ArrayPool<T>.Shared.Rent(64);
@@ -62,6 +65,10 @@ namespace ConveyorEngine.Util
         }
 
         public int excluder = 0;
+        /// <summary>
+        /// Creates an indexed pool with the given initial size
+        /// </summary>
+        /// <param name="size"></param>
         public IndexedPool(int size = 100)
         {
             Items = ArrayPool<T>.Shared.Rent(size);
@@ -98,6 +105,10 @@ namespace ConveyorEngine.Util
             return val;
         }
 
+        /// <summary>
+        /// Assigns the given item to this pool
+        /// </summary>
+        /// <param name="item"></param>
         public void Assign(Indexable item)
         {
             if (item is T t)

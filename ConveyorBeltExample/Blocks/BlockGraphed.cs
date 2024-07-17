@@ -33,6 +33,13 @@ namespace ConveyorBeltExample.Blocks
 
         public bool RendersItems = true;
 
+        /// <summary>
+        /// Gets the adjacent points to this graphed block. Expect 4 points for a 1x1 block, 8 for 2x2, and so on.
+        /// The points will not be returned in a perfect rotational direction for larger blocks.
+        /// </summary>
+        /// <param name="pos"></param>
+        /// <param name="vals"></param>
+        /// <param name="count"></param>
         public void AdjacentPoints(KPoint pos, out KPoint[] vals, out int count)
         {
             vals = ArrayPool<KPoint>.Shared.Rent(Bounds.Width * 2 + Bounds.Height * 2);
@@ -49,11 +56,24 @@ namespace ConveyorBeltExample.Blocks
 
         }
 
+        /// <summary>
+        /// Gets a default inventory for this graphed block
+        /// </summary>
+        /// <returns></returns>
         public virtual Inventory GetDefaultInventory()
         {
             return new SequentialInventory();
         }
 
+        /// <summary>
+        /// The rendering rate in terms of work. In general, "Work" is a consistent concept 
+        /// that can be used to visually unify everything. A WorkRate of 1.0 indicates that,
+        /// visually speaking, 1 complete operation occurs in 1 second.
+        /// 
+        /// <para>Importantly, this measurement has no functional effect, and is simply a way
+        /// of correcting the animation rates of the things</para>
+        /// </summary>
+        /// <returns></returns>
         public virtual float RenderWorkRate() => 1f;
 
         /// <summary>
@@ -342,6 +362,10 @@ namespace ConveyorBeltExample.Blocks
             return time;
         }
 
+        /// <summary>
+        /// Gets the layer for the given conveyor
+        /// </summary>
+        /// <returns></returns>
         public override int GetLayer()
         {
             return LayerManager.ConveyorLayer;
